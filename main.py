@@ -31,13 +31,9 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-import sys
-import os
-
 from gi.repository import Gtk
 from gi.repository import GtkSource
 from gi.repository import GObject
-
 
 class Simple_Program(object):
 
@@ -46,16 +42,70 @@ class Simple_Program(object):
 		GObject.type_register(GtkSource.View)
 		self.builder.add_from_file("main.glade")
 		self.main_window = self.builder.get_object("MainWindow")
+		self.view = self.builder.get_object("View")
+		self.textbuff = GtkSource.Buffer()
+		self.view.set_buffer(self.textbuff)
+		self.lm = GtkSource.LanguageManager()
+		self.textbuff.set_language(self.lm.get_language('html'))
 		self.main_window.connect("destroy", Gtk.main_quit)
 
+		self.codelist = """
+			{{jinja}}
+			{{jinja.foo}}
+			{{jinja.bar}}
+			<!DOCTYPE html>
+			<html> </html>
+			<a href="{{ foo }}">{{ bar }}</a>
+			<img src="{{ dat_pic }}"/>
+			<table> </table>
+			<td> </td>
+			<tr> </tr>
+			<style format="text/css"> </style>
+		"""
+
 	def show(self):
-		self.auto_completation()
+		self.set_auto_completation()
 		self.main_window.show_all()
 
-	def auto_completation(self):
-		#self.autocomplete = GtkSource.Completion()
+	def set_auto_completation(self):
+		"""
+		1)
+		Set up a provider that get words from what has already been entered
+		in the gtkSource.Buffer that is tied to the GtkSourceView
+
+		2)
+		Set up a second buffer that stores the coding tags we want to add
+		As this thing uses buffers for words don't ask me why
+		"""
+		# This gets the GtkSourceView completation thats already tied to the GtkSourceView
+		# We need it to attached our providers to it
+		self.view_completion = self.view.get_completion()
+
+		# 1) Make a new provider, attach it to the main buffer add to view_autocomplete
+		self.view_autocomplete = GtkSource.CompletionWords.new('main')
+		self.view_autocomplete.register(self.textbuff)
+		self.view_completion.add_provider(self.view_autocomplete)
+
+		# 2) Make a new buffer, add a str to it, make a provider, add it to the view_autocomplete
+		self.codebuff = GtkSource.Buffer()
+		self.codebuff.begin_not_undoable_action()
+		self.codebuff.set_text(self.codelist)
+		self.codebuff.end_not_undoable_action()
+		self.view_codecomplete = GtkSource.CompletionWords.new('codelist')
+		self.view_codecomplete.register(self.codebuff)
+		self.view_completion.add_provider(self.view_codecomplete)
+		#self.view_completion.connect('populate-context', self.codecomplete)
 		return
 
+	def codecomplete(self, completion_object, completion_context):
+		"""
+		When the signal from the completation occurs requesting for compeltions
+		this will add it to the list. maybe someday, currently broke, connect commented out
+		"""
+		view_code_proposal = GtkSource.CompletionProposal
+		view_code_proposal.equal(view_code_proposal, 1)
+		completion_context.add_proposals(self.view_codecomplete, view_code_proposal, 'test')
+		return
 
 def main():
 	gui = Simple_Program()
