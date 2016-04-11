@@ -35,6 +35,7 @@ from gi.repository import Gtk
 from gi.repository import GtkSource
 from gi.repository import GObject
 
+
 class Simple_Program(object):
 
 	def __init__(self):
@@ -46,22 +47,15 @@ class Simple_Program(object):
 		self.textbuff = GtkSource.Buffer()
 		self.view.set_buffer(self.textbuff)
 		self.lm = GtkSource.LanguageManager()
-		self.textbuff.set_language(self.lm.get_language('html'))
+		self.textbuff.set_language(self.lm.get_language('python'))
 		self.main_window.connect("destroy", Gtk.main_quit)
 
-		self.codelist = """
-			{{jinja}}
-			{{jinja.foo}}
-			{{jinja.bar}}
-			<!DOCTYPE html>
-			<html> </html>
-			<a href="{{ foo }}">{{ bar }}</a>
-			<img src="{{ dat_pic }}"/>
-			<table> </table>
-			<td> </td>
-			<tr> </tr>
-			<style format="text/css"> </style>
-		"""
+		self.keywords = """
+foo
+bar
+linux
+rocks
+"""
 
 	def show(self):
 		self.set_auto_completation()
@@ -77,7 +71,7 @@ class Simple_Program(object):
 		Set up a second buffer that stores the coding tags we want to add
 		As this thing uses buffers for words don't ask me why
 		"""
-		# This gets the GtkSourceView completation thats already tied to the GtkSourceView
+		# This gets the GtkSourceView competition thats already tied to the GtkSourceView
 		# We need it to attached our providers to it
 		self.view_completion = self.view.get_completion()
 
@@ -87,25 +81,32 @@ class Simple_Program(object):
 		self.view_completion.add_provider(self.view_autocomplete)
 
 		# 2) Make a new buffer, add a str to it, make a provider, add it to the view_autocomplete
-		self.codebuff = GtkSource.Buffer()
-		self.codebuff.begin_not_undoable_action()
-		self.codebuff.set_text(self.codelist)
-		self.codebuff.end_not_undoable_action()
-		self.view_codecomplete = GtkSource.CompletionWords.new('codelist')
-		self.view_codecomplete.register(self.codebuff)
-		self.view_completion.add_provider(self.view_codecomplete)
-		#self.view_completion.connect('populate-context', self.codecomplete)
+		self.keywordsbuff = GtkSource.Buffer()
+		self.keywordsbuff.begin_not_undoable_action()
+		self.keywordsbuff.set_text(self.keywords)
+		self.keywordsbuff.end_not_undoable_action()
+		self.view_keywordcomplete = GtkSource.CompletionWords.new('keywords')
+		self.view_keywordcomplete.register(self.keywordsbuff)
+
+		self.view_completion.add_provider(self.view_keywordcomplete)
+		self.view_completion.connect('populate-context', self.manual_proposal)
 		return
 
-	def codecomplete(self, completion_object, completion_context):
+	def manual_proposal(self, completion_object, completion_context):
 		"""
 		When the signal from the completation occurs requesting for compeltions
 		this will add it to the list. maybe someday, currently broke, connect commented out
 		"""
-		view_code_proposal = GtkSource.CompletionProposal
-		view_code_proposal.equal(view_code_proposal, 1)
-		completion_context.add_proposals(self.view_codecomplete, view_code_proposal, 'test')
-		return
+		# example of itering from beganing to current position
+		text_iter = completion_context.get_iter()
+		start_iter = self.textbuff.get_start_iter()
+		print(text_iter.get_visible_text(start_iter))
+
+		view_code_proposal = GtkSource.CompletionItem
+		# proposals must be a sequence
+		proposals = (view_code_proposal.new_with_markup('windows', 'windows'),)
+		# https://developer.gnome.org/gtksourceview/stable/GtkSourceCompletionContext.html#gtk-source-completion-context-add-proposals
+		completion_context.add_proposals(self.view_keywordcomplete, proposals, True)
 
 def main():
 	gui = Simple_Program()
