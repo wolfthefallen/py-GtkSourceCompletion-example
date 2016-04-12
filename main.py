@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#  bmp_header.py
 #
 #  Copyright 2015 Erik Daguerre <fallenwolf@meddlesomewolf.com>
+#  Special thanks to @zeroSteiner for help debugging and suggestions
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are
@@ -31,10 +31,78 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+#
+
+import re
+
 from gi.repository import Gtk
 from gi.repository import GtkSource
 from gi.repository import GObject
 
+
+class CustomCompletion(GObject.GObject, GtkSource.CompletionProvider):
+	"""
+	This is a custom Completion Provider
+	In this instance, it will do 2 things;
+
+	1) always provide Hello World! (Not ideal but an option so its in the example)
+
+	2) Utilizes the Gtk.TextIter from the TextBuffer to determine if there is a jinja
+	example of '{{ custom.' if so it will provide you with the options of foo and bar.
+	if select it will insert foo }} or bar }}, completing your syntax
+
+	PLEASE NOTE the GtkTextIter Logic and regex are really rough and should be adjusted and tuned
+	to fit your requirements
+
+	# Implement the Completion Provider
+	# http://stackoverflow.com/questions/32611820/implementing-gobject-interfaces-in-python
+	# https://gist.github.com/andialbrecht/4463278 (Python example implementing TreeModel)
+	# https://developer.gnome.org/gtk3/stable/GtkTreeModel.html (Gtk TreeModel interface specification)
+	# A special thank you to @zeroSteiner
+	"""
+
+	# apparently interface methods MUST be prefixed with do_
+	def do_get_name(self):
+		return 'Custom'
+
+	def do_match(self, context):
+		# this should evaluate the context to determine if this completion
+		# provider is applicable, for debugging always return True
+		return True
+
+	def do_populate(self, context):
+		proposals = [
+			GtkSource.CompletionItem(label='Hello World!', text='Hello World!', icon=None, info=None)  # always proposed
+		]
+
+		# found difference in Gtk Versions
+		end_iter = context.get_iter()
+		if not isinstance(end_iter, object):
+			_, end_iter = context.get_iter()
+
+		if end_iter:
+			buf = end_iter.get_buffer()
+			start_iter = buf.get_start_iter()
+			diff = end_iter.get_offset() - start_iter.get_offset()
+			print('diff is {}'.format(diff))
+			if diff > 10:
+				mov_iter = end_iter.copy()
+				mov_iter.backward_visible_word_starts(1)
+				mov_iter.backward_chars(3)
+				left_text = buf.get_text(mov_iter, end_iter, True)
+			else:
+				left_text = buf.get_text(start_iter, end_iter, True)
+
+			if re.match(r'.*\{\{\s*custom\.$', left_text):
+				proposals.append(
+					GtkSource.CompletionItem(label='foo', text='foo }}')  # optionally proposed based on left search via regex
+				)
+				proposals.append(
+					GtkSource.CompletionItem(label='bar', text='bar }}')  # optionally proposed based on left search via regex
+				)
+
+		context.add_proposals(self, proposals, True)
+		return
 
 class Simple_Program(object):
 
@@ -51,11 +119,9 @@ class Simple_Program(object):
 		self.main_window.connect("destroy", Gtk.main_quit)
 
 		self.keywords = """
-foo
-bar
-linux
-rocks
-"""
+				GtkSourceView
+				Completion
+			"""
 
 	def show(self):
 		self.set_auto_completation()
@@ -68,10 +134,13 @@ rocks
 		in the gtkSource.Buffer that is tied to the GtkSourceView
 
 		2)
-		Set up a second buffer that stores the coding tags we want to add
-		As this thing uses buffers for words don't ask me why
+		Set up a second buffer that stores the keywords we want to be available
+
+		3)
+		Setup an instance of our custome completion class to handle special characters with
+		auto complete.
 		"""
-		# This gets the GtkSourceView competition thats already tied to the GtkSourceView
+		# This gets the GtkSourceView completion that's already tied to the GtkSourceView
 		# We need it to attached our providers to it
 		self.view_completion = self.view.get_completion()
 
@@ -81,32 +150,20 @@ rocks
 		self.view_completion.add_provider(self.view_autocomplete)
 
 		# 2) Make a new buffer, add a str to it, make a provider, add it to the view_autocomplete
-		self.keywordsbuff = GtkSource.Buffer()
-		self.keywordsbuff.begin_not_undoable_action()
-		self.keywordsbuff.set_text(self.keywords)
-		self.keywordsbuff.end_not_undoable_action()
-		self.view_keywordcomplete = GtkSource.CompletionWords.new('keywords')
-		self.view_keywordcomplete.register(self.keywordsbuff)
+		self.keybuff = GtkSource.Buffer()
+		self.keybuff.begin_not_undoable_action()
+		self.keybuff.set_text(self.keywords)
+		self.keybuff.end_not_undoable_action()
+		self.view_keyword_complete = GtkSource.CompletionWords.new('keyword')
+		self.view_keyword_complete.register(self.keybuff)
+		self.view_completion.add_provider(self.view_keyword_complete)
 
-		self.view_completion.add_provider(self.view_keywordcomplete)
-		self.view_completion.connect('populate-context', self.manual_proposal)
+		# 3) Set up our custom provider for syntax completion.
+		custom_completion = CustomCompletion()
+		self.view_completion.add_provider(custom_completion)
+		self.custom_completion = custom_completion
 		return
 
-	def manual_proposal(self, completion_object, completion_context):
-		"""
-		When the signal from the completation occurs requesting for compeltions
-		this will add it to the list. maybe someday, currently broke, connect commented out
-		"""
-		# example of itering from beganing to current position
-		text_iter = completion_context.get_iter()
-		start_iter = self.textbuff.get_start_iter()
-		print(text_iter.get_visible_text(start_iter))
-
-		view_code_proposal = GtkSource.CompletionItem
-		# proposals must be a sequence
-		proposals = (view_code_proposal.new_with_markup('windows', 'windows'),)
-		# https://developer.gnome.org/gtksourceview/stable/GtkSourceCompletionContext.html#gtk-source-completion-context-add-proposals
-		completion_context.add_proposals(self.view_keywordcomplete, proposals, True)
 
 def main():
 	gui = Simple_Program()
