@@ -34,13 +34,16 @@
 #
 
 import re
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('GtkSource', '3.0')
 
 from gi.repository import Gtk
 from gi.repository import GtkSource
 from gi.repository import GObject
 
 
-class CustomCompletion(GObject.GObject, GtkSource.CompletionProvider):
+class CustomCompletionProvider(GObject.GObject, GtkSource.CompletionProvider):
 	"""
 	This is a custom Completion Provider
 	In this instance, it will do 2 things;
@@ -77,21 +80,17 @@ class CustomCompletion(GObject.GObject, GtkSource.CompletionProvider):
 
 		# found difference in Gtk Versions
 		end_iter = context.get_iter()
-		if not isinstance(end_iter, object):
+		if not isinstance(end_iter, Gtk.TextIter):
 			_, end_iter = context.get_iter()
 
 		if end_iter:
 			buf = end_iter.get_buffer()
-			start_iter = buf.get_start_iter()
-			diff = end_iter.get_offset() - start_iter.get_offset()
-			print('diff is {}'.format(diff))
-			if diff > 10:
-				mov_iter = end_iter.copy()
-				mov_iter.backward_visible_word_starts(1)
-				mov_iter.backward_chars(3)
+			mov_iter = end_iter.copy()
+			if mov_iter.backward_search('{{', Gtk.TextSearchFlags.VISIBLE_ONLY):
+				mov_iter, _ = mov_iter.backward_search('{{', Gtk.TextSearchFlags.VISIBLE_ONLY)
 				left_text = buf.get_text(mov_iter, end_iter, True)
 			else:
-				left_text = buf.get_text(start_iter, end_iter, True)
+				left_text = ''
 
 			if re.match(r'.*\{\{\s*custom\.$', left_text):
 				proposals.append(
@@ -104,7 +103,7 @@ class CustomCompletion(GObject.GObject, GtkSource.CompletionProvider):
 		context.add_proposals(self, proposals, True)
 		return
 
-class Simple_Program(object):
+class SimpleProgram(object):
 
 	def __init__(self):
 		self.builder = Gtk.Builder()
@@ -159,14 +158,14 @@ class Simple_Program(object):
 		self.view_completion.add_provider(self.view_keyword_complete)
 
 		# 3) Set up our custom provider for syntax completion.
-		custom_completion = CustomCompletion()
-		self.view_completion.add_provider(custom_completion)
-		self.custom_completion = custom_completion
+		custom_completion_provider = CustomCompletionProvider()
+		self.view_completion.add_provider(custom_completion_provider)
+		self.custom_completion_provider = custom_completion_provider
 		return
 
 
 def main():
-	gui = Simple_Program()
+	gui = SimpleProgram()
 	gui.show()
 	Gtk.main()
 
